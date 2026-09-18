@@ -1,40 +1,71 @@
 <template>
-  <div class="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-tajawal" dir="rtl">
+  <div
+    class="min-h-screen bg-slate-50 text-slate-800 flex flex-col antialiased transition-colors duration-200"
+    :dir="localeStore.isRtl ? 'rtl' : 'ltr'"
+  >
     <!-- Top Navigation Bar (Only for Authenticated Users) -->
-    <header v-if="authStore.isAuthenticated" class="bg-slate-900 text-white sticky top-0 z-40 shadow-md border-b border-slate-800">
+    <header v-if="authStore.isAuthenticated" class="bg-slate-900 text-white sticky top-0 z-40 shadow-sm border-b border-slate-800">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <!-- Brand & Tenant Name -->
         <div class="flex items-center gap-3">
-          <router-link to="/" class="flex items-center gap-2">
-            <div class="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-sm shadow-md shadow-amber-500/20">
+          <router-link to="/" class="flex items-center gap-3 group">
+            <div class="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-sm shadow-sm group-hover:bg-amber-400 transition">
               FO
             </div>
             <div>
-              <span class="font-extrabold text-base tracking-tight text-white block leading-none">FieldOps KSA</span>
-              <span class="text-[10px] text-amber-400 font-semibold block mt-0.5">{{ authStore.tenant?.name || 'منصة المقاولات' }}</span>
+              <span class="font-extrabold text-base tracking-tight text-white block leading-none">
+                {{ localeStore.t('common.appName') }}
+              </span>
+              <span class="text-[11px] text-amber-400/90 font-medium block mt-1 truncate max-w-[180px] sm:max-w-none">
+                {{ authStore.tenant?.name || localeStore.t('common.tenantFallback') }}
+              </span>
             </div>
           </router-link>
         </div>
 
-        <!-- User Profile & Logout -->
-        <div class="flex items-center gap-3">
-          <div class="hidden sm:flex flex-col text-left text-xs">
-            <span class="font-bold text-slate-200">{{ authStore.userName }}</span>
-            <span class="text-[10px] text-slate-400 text-right">{{ translateRole(authStore.userRole) }}</span>
+        <!-- Right Side: Language Switcher, User Profile, Logout -->
+        <div class="flex items-center gap-2 sm:gap-3">
+          <!-- Segmented Language Switcher -->
+          <div class="inline-flex items-center p-0.5 rounded-xl bg-slate-800/80 border border-slate-700/70 text-xs">
+            <button
+              @click="localeStore.setLocale('ar')"
+              type="button"
+              class="px-2.5 py-1 rounded-lg text-xs font-semibold transition"
+              :class="localeStore.locale === 'ar' ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' : 'text-slate-400 hover:text-white'"
+            >
+              العربية
+            </button>
+            <button
+              @click="localeStore.setLocale('en')"
+              type="button"
+              class="px-2.5 py-1 rounded-lg text-xs font-semibold transition"
+              :class="localeStore.locale === 'en' ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' : 'text-slate-400 hover:text-white'"
+            >
+              English
+            </button>
           </div>
 
-          <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" :class="getRoleBadgeClass(authStore.userRole)">
-            {{ translateRole(authStore.userRole) }}
+          <!-- User Details (Name & Email/Tenant) -->
+          <div class="hidden md:flex flex-col text-start text-xs">
+            <span class="font-bold text-slate-100 leading-tight">{{ authStore.userName }}</span>
+            <span class="text-[11px] text-slate-400 truncate max-w-[150px]">{{ authStore.user?.email || authStore.tenant?.name }}</span>
+          </div>
+
+          <!-- Role Badge -->
+          <span
+            class="px-2.5 py-1 rounded-lg text-[11px] font-semibold border"
+            :class="getRoleBadgeClass(authStore.userRole)"
+          >
+            {{ localeStore.translateRole(authStore.userRole) }}
           </span>
 
+          <!-- Logout Button -->
           <button
             @click="handleLogout"
-            title="تسجيل الخروج"
-            class="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-xl transition"
+            :title="localeStore.t('common.logout')"
+            class="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-            </svg>
+            <LogOut class="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -45,48 +76,54 @@
       <router-view />
     </main>
 
-    <!-- Mobile-First Bottom Status or Footer -->
-    <footer v-if="authStore.isAuthenticated" class="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-500">
-      <p>منصة FieldOps KSA لإدارة العمليات الميدانية • التوثيق الفوري وحساب الإنجاز الموزون للمقاولات</p>
+    <!-- Clean Minimalist Footer -->
+    <footer v-if="authStore.isAuthenticated" class="bg-white border-t border-slate-200/80 py-3.5 text-center text-xs text-slate-500">
+      <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <p class="text-slate-500">{{ localeStore.t('common.footer') }}</p>
+        <span class="text-[11px] font-mono text-slate-400">v1.2.0 • FieldOps KSA</span>
+      </div>
     </footer>
   </div>
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
+import { onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { LogOut } from 'lucide-vue-next';
 import { useAuthStore } from './stores/auth';
+import { useLocaleStore } from './stores/locale';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const localeStore = useLocaleStore();
 
 const handleLogout = async () => {
   await authStore.logout();
   router.push('/login');
 };
 
-const translateRole = (role) => {
-  const map = {
-    owner: 'المدير العام',
-    pm: 'مدير المشاريع',
-    site_engineer: 'مهندس الموقع',
-    viewer: 'استشاري / مالك',
-  };
-  return map[role] || role;
-};
-
 const getRoleBadgeClass = (role) => {
   switch (role) {
     case 'owner':
-      return 'bg-amber-500/20 text-amber-300 border border-amber-500/40';
+      return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
     case 'pm':
-      return 'bg-sky-500/20 text-sky-300 border border-sky-500/40';
+      return 'bg-sky-500/10 text-sky-300 border-sky-500/30';
     case 'site_engineer':
-      return 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+      return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
     default:
-      return 'bg-purple-500/20 text-purple-300 border border-purple-500/40';
+      return 'bg-purple-500/10 text-purple-300 border-purple-500/30';
   }
 };
+
+const updateDocTitle = () => {
+  if (typeof document !== 'undefined') {
+    document.title = localeStore.isRtl
+      ? 'FieldOps KSA | إدارة العمليات الميدانية للمقاولات'
+      : 'FieldOps KSA | Construction Field Operations Platform';
+  }
+};
+
+watch(() => localeStore.locale, updateDocTitle, { immediate: true });
 
 onMounted(() => {
   if (authStore.isAuthenticated) {

@@ -9,6 +9,7 @@ export default {
     extend: {
       fontFamily: {
         tajawal: ['Tajawal', 'sans-serif'],
+        inter: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
       colors: {
         brand: {

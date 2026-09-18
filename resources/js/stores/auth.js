@@ -32,8 +32,8 @@ export const useAuthStore = defineStore('auth', {
 
                 return user;
             } catch (err) {
-                this.error = err.response?.data?.message || 'فشل تسجيل الدخول';
-                throw this.error;
+                this.error = err.response?.data?.message || null;
+                throw err;
             } finally {
                 this.loading = false;
             }
