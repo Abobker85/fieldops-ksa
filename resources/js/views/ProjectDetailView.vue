@@ -238,7 +238,7 @@
               </button>
 
               <a
-                :href="`/api/v1/daily-reports/${report.id}/export-pdf`"
+                :href="report.export_url || `/api/v1/daily-reports/${report.id}/export-pdf?share_token=${report.share_token || ''}`"
                 target="_blank"
                 class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1"
               >
@@ -303,6 +303,7 @@
           <p class="text-xs text-slate-500">المخططات المعتمدة للتنفيذ (IFC) وتتبع الإصدارات</p>
         </div>
         <button
+          v-if="canManageDocs"
           @click="showUploadDocModal = true"
           class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition"
         >
@@ -384,6 +385,7 @@
           <p class="text-xs text-slate-500">استلام الأعمال الميدانية والاستفسارات الفنية</p>
         </div>
         <button
+          v-if="canSubmitRequests"
           @click="showCreateRequestModal = true"
           class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition"
         >
@@ -755,9 +757,18 @@
           </div>
 
           <div class="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
-            <input id="ifcCheck" v-model="docForm.is_approved_for_construction" type="checkbox" class="w-4 h-4 text-amber-500 rounded focus:ring-amber-500" />
+            <input
+              id="ifcCheck"
+              v-model="docForm.is_approved_for_construction"
+              :disabled="authStore.userRole === 'site_engineer'"
+              type="checkbox"
+              class="w-4 h-4 text-amber-500 rounded focus:ring-amber-500 disabled:opacity-40"
+            />
             <label for="ifcCheck" class="text-xs font-bold text-slate-800 cursor-pointer">
               مخطط معتمد للتنفيذ والبناء (Issued For Construction - IFC)
+              <span v-if="authStore.userRole === 'site_engineer'" class="text-[10px] text-amber-600 font-normal block">
+                (يتطلب صلاحية مدير المشروع أو المالك للاعتماد)
+              </span>
             </label>
           </div>
 
@@ -1041,6 +1052,8 @@ const tabs = computed(() => [
 
 const canManageBoq = computed(() => ['owner', 'pm'].includes(authStore.userRole));
 const canApproveRequests = computed(() => ['owner', 'pm', 'viewer'].includes(authStore.userRole));
+const canManageDocs = computed(() => ['owner', 'pm', 'site_engineer'].includes(authStore.userRole));
+const canSubmitRequests = computed(() => ['owner', 'pm', 'site_engineer'].includes(authStore.userRole));
 
 const allPhotos = computed(() => {
   const photos = [];
@@ -1160,6 +1173,7 @@ const submitMediaUpload = async () => {
 };
 
 const shareOnWhatsApp = (report) => {
+  const downloadUrl = report.export_url || `${window.location.origin}/api/v1/daily-reports/${report.id}/export-pdf?share_token=${report.share_token || ''}`;
   const text = `*تقرير الموقع الميداني اليومي - ${project.value.name} (${project.value.code})*
 📅 *التاريخ:* ${report.report_date}
 👷 *العمالة الميدانية:* ${report.manpower_count} عامل
@@ -1171,7 +1185,7 @@ ${report.work_summary}
 ${report.blockers_notes ? `\n*المعوقات والملاحظات:*\n${report.blockers_notes}` : ''}
 
 🔗 يمكنك تحميل التقرير الرسمي المعتمد PDF من الرابط:
-${window.location.origin}/api/v1/daily-reports/${report.id}/export-pdf`;
+${downloadUrl}`;
 
   const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
   window.open(url, '_blank');

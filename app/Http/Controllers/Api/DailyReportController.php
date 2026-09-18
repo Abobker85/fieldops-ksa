@@ -36,6 +36,11 @@ class DailyReportController extends Controller
 
     public function store(Request $request, int $projectId): JsonResponse
     {
+        $user = $request->user();
+        if ($user && $user->roles()->exists() && !$user->hasAnyRole(['owner', 'pm', 'site_engineer'])) {
+            return ApiResponse::error('غير مصرح لك بتسجيل التقارير اليومية', 403);
+        }
+
         $project = Project::findOrFail($projectId);
 
         $validated = $request->validate([
@@ -111,6 +116,11 @@ class DailyReportController extends Controller
 
     public function uploadMedia(Request $request, int $id): JsonResponse
     {
+        $user = $request->user();
+        if ($user && $user->roles()->exists() && !$user->hasAnyRole(['owner', 'pm', 'site_engineer'])) {
+            return ApiResponse::error('غير مصرح لك برفع وسائط التقرير اليومي', 403);
+        }
+
         $report = DailyReport::with('project')->findOrFail($id);
 
         $request->validate([
@@ -128,6 +138,7 @@ class DailyReportController extends Controller
         $storedPath = $file->store("projects/{$report->project_id}/reports/{$report->id}", 'public');
 
         $media = DailyReportMedia::create([
+            'tenant_id' => $report->tenant_id,
             'daily_report_id' => $report->id,
             'file_path' => $storedPath,
             'file_type' => $isImage ? 'image' : 'video',
@@ -146,9 +157,37 @@ class DailyReportController extends Controller
         return ApiResponse::success($media, 'تم رفع الوسائط بنجاح', 201);
     }
 
-    public function exportPdf(int $id)
+    public function exportPdf(Request $request, int $id)
     {
-        $report = DailyReport::with(['project.tenant', 'user', 'media'])->findOrFail($id);
+        $shareToken = $request->query('share_token');
+
+        if ($shareToken) {
+            $report = DailyReport::withoutGlobalScopes()
+                ->with(['project.tenant', 'user', 'media'])
+                ->findOrFail($id);
+
+            $expectedToken = hash_hmac('sha256', "report-{$report->id}-{$report->project_id}", config('app.key') ?: 'fieldops-secret-key');
+            if (!hash_equals($expectedToken, $shareToken)) {
+                abort(403, 'رابط مشاركة التقرير غير صالح أو منتهي');
+            }
+        } else {
+            $user = $request->user('sanctum') ?? auth()->user();
+            if (!$user && $request->filled('token')) {
+                $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($request->query('token'));
+                if ($tokenModel) {
+                    $user = $tokenModel->tokenable;
+                }
+            }
+
+            if (!$user) {
+                abort(401, 'يرجى تسجيل الدخول لعرض التقرير');
+            }
+
+            $report = DailyReport::withoutGlobalScopes()
+                ->where('tenant_id', $user->tenant_id)
+                ->with(['project.tenant', 'user', 'media'])
+                ->findOrFail($id);
+        }
 
         $pdf = Pdf::loadView('reports.daily-pdf', [
             'report' => $report,

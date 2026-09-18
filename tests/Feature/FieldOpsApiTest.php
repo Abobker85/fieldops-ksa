@@ -588,4 +588,239 @@ class FieldOpsApiTest extends TestCase
         $payResp->assertStatus(200)
             ->assertJsonPath('data.status', 'paid');
     }
+
+    public function test_whatsapp_and_share_token_pdf_download(): void
+    {
+        $project = Project::create([
+            'tenant_id' => $this->tenantA->id,
+            'code' => 'PRJ-SHARE',
+            'name' => 'مشروع المشاركة',
+            'client_name' => 'عميل المشاركة',
+            'location_city' => 'الرياض',
+            'contract_value' => 500000,
+            'start_date' => '2026-01-01',
+            'expected_end_date' => '2026-12-31',
+        ]);
+
+        $report = DailyReport::create([
+            'project_id' => $project->id,
+            'user_id' => $this->userA->id,
+            'report_date' => '2026-09-18',
+            'weather_condition' => 'معتدل',
+            'manpower_count' => 12,
+            'work_summary' => 'تقرير للمشاركة عبر الواتساب',
+            'status' => 'approved',
+        ]);
+
+        $this->assertNotEmpty($report->share_token);
+        $this->assertStringContainsString('share_token=', $report->export_url);
+
+        // 1. Unauthenticated request with NO token fails with 401
+        $unauthResp = $this->get("/api/v1/daily-reports/{$report->id}/export-pdf");
+        $unauthResp->assertStatus(401);
+
+        // 2. Unauthenticated request WITH valid share_token (from WhatsApp) succeeds with 200 PDF
+        $validShareResp = $this->get("/api/v1/daily-reports/{$report->id}/export-pdf?share_token={$report->share_token}");
+        $validShareResp->assertStatus(200)
+            ->assertHeader('content-type', 'application/pdf');
+
+        // 3. Request with tampered share_token fails with 403
+        $tamperedResp = $this->get("/api/v1/daily-reports/{$report->id}/export-pdf?share_token=invalid-fake-token");
+        $tamperedResp->assertStatus(403);
+    }
+
+    public function test_document_revision_and_ifc_superseding(): void
+    {
+        Storage::fake('public');
+        Role::firstOrCreate(['name' => 'pm', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'site_engineer', 'guard_name' => 'web']);
+
+        $pm = User::create([
+            'tenant_id' => $this->tenantA->id,
+            'name' => 'مدير المشروع',
+            'email' => 'pm_doc@test.com',
+            'password' => bcrypt('secret123'),
+            'status' => 'active',
+        ]);
+        $pm->assignRole('pm');
+
+        $engineer = User::create([
+            'tenant_id' => $this->tenantA->id,
+            'name' => 'مهندس المشروع',
+            'email' => 'eng_doc@test.com',
+            'password' => bcrypt('secret123'),
+            'status' => 'active',
+        ]);
+        $engineer->assignRole('site_engineer');
+
+        $project = Project::create([
+            'tenant_id' => $this->tenantA->id,
+            'code' => 'PRJ-IFC',
+            'name' => 'مشروع المخططات IFC',
+            'client_name' => 'عميل',
+            'location_city' => 'الرياض',
+            'contract_value' => 500000,
+            'start_date' => '2026-01-01',
+            'expected_end_date' => '2026-12-31',
+        ]);
+
+        $file1 = UploadedFile::fake()->create('rev01.pdf', 300, 'application/pdf');
+        $file2 = UploadedFile::fake()->create('rev02.pdf', 300, 'application/pdf');
+        $file3 = UploadedFile::fake()->create('rev03.pdf', 300, 'application/pdf');
+
+        // 1. PM uploads Rev 01 as IFC
+        $resp1 = $this->actingAs($pm)->postJson("/api/v1/projects/{$project->id}/documents", [
+            'title' => 'مخطط الأساسات',
+            'document_code' => 'DWG-FD-01',
+            'discipline' => 'structural',
+            'current_revision' => 'Rev 01',
+            'is_approved_for_construction' => true,
+            'file' => $file1,
+        ]);
+        $resp1->assertStatus(201);
+        $doc1Id = $resp1->json('data.id');
+        $this->assertTrue($resp1->json('data.is_approved_for_construction'));
+
+        // 2. PM uploads Rev 02 as IFC -> Rev 01 must be superseded (is_approved_for_construction = false)
+        $resp2 = $this->actingAs($pm)->postJson("/api/v1/projects/{$project->id}/documents", [
+            'title' => 'مخطط الأساسات المحدث',
+            'document_code' => 'DWG-FD-01',
+            'discipline' => 'structural',
+            'current_revision' => 'Rev 02',
+            'is_approved_for_construction' => true,
+            'file' => $file2,
+        ]);
+        $resp2->assertStatus(201);
+        $this->assertTrue($resp2->json('data.is_approved_for_construction'));
+
+        // Confirm Rev 01 is now false
+        $this->assertFalse((bool) \App\Models\ProjectDocument::find($doc1Id)->is_approved_for_construction);
+
+        // 3. Site Engineer trying to upload as IFC should be rejected with 403
+        $respEngIfc = $this->actingAs($engineer)->postJson("/api/v1/projects/{$project->id}/documents", [
+            'title' => 'مخطط غير معتمد',
+            'document_code' => 'DWG-FD-01',
+            'discipline' => 'structural',
+            'is_approved_for_construction' => true,
+            'file' => $file3,
+        ]);
+        $respEngIfc->assertStatus(403);
+
+        // 4. Site Engineer uploads without revision -> should auto-increment to Rev 03
+        $respEngAuto = $this->actingAs($engineer)->postJson("/api/v1/projects/{$project->id}/documents", [
+            'title' => 'مخطط دراسة',
+            'document_code' => 'DWG-FD-01',
+            'discipline' => 'structural',
+            'is_approved_for_construction' => false,
+            'file' => $file3,
+        ]);
+        $respEngAuto->assertStatus(201)
+            ->assertJsonPath('data.current_revision', 'Rev 03');
+    }
+
+    public function test_viewer_role_cannot_post_sensitive_site_records(): void
+    {
+        Storage::fake('public');
+        Role::firstOrCreate(['name' => 'viewer', 'guard_name' => 'web']);
+
+        $viewer = User::create([
+            'tenant_id' => $this->tenantA->id,
+            'name' => 'استشاري المالك المشاهد',
+            'email' => 'viewer_guard@test.com',
+            'password' => bcrypt('secret123'),
+            'status' => 'active',
+        ]);
+        $viewer->assignRole('viewer');
+
+        $project = Project::create([
+            'tenant_id' => $this->tenantA->id,
+            'code' => 'PRJ-VIEWER-RESTRICT',
+            'name' => 'مشروع المقيد',
+            'client_name' => 'عميل',
+            'location_city' => 'الرياض',
+            'contract_value' => 500000,
+            'start_date' => '2026-01-01',
+            'expected_end_date' => '2026-12-31',
+        ]);
+
+        // 1. Viewer CANNOT create daily reports
+        $respReport = $this->actingAs($viewer)->postJson("/api/v1/projects/{$project->id}/daily-reports", [
+            'report_date' => '2026-09-18',
+            'manpower_count' => 10,
+            'work_summary' => 'غير مسموح للمشاهد',
+        ]);
+        $respReport->assertStatus(403);
+
+        // 2. Viewer CANNOT upload documents
+        $fakeFile = UploadedFile::fake()->create('doc.pdf', 100, 'application/pdf');
+        $respDoc = $this->actingAs($viewer)->postJson("/api/v1/projects/{$project->id}/documents", [
+            'title' => 'مخطط',
+            'document_code' => 'DWG-V',
+            'discipline' => 'architectural',
+            'file' => $fakeFile,
+        ]);
+        $respDoc->assertStatus(403);
+
+        // 3. Viewer CANNOT submit site requests
+        $respReq = $this->actingAs($viewer)->postJson("/api/v1/projects/{$project->id}/requests", [
+            'type' => 'WIR',
+            'title' => 'طلب غير مصرح',
+            'description' => 'وصف',
+        ]);
+        $respReq->assertStatus(403);
+    }
+
+    public function test_executive_summary_calculation(): void
+    {
+        $project = Project::create([
+            'tenant_id' => $this->tenantA->id,
+            'code' => 'PRJ-EXEC',
+            'name' => 'مشروع الملخص التنفيذي',
+            'client_name' => 'عميل تنفيذي',
+            'location_city' => 'الرياض',
+            'contract_value' => 1000000,
+            'start_date' => '2026-01-01',
+            'expected_end_date' => '2026-12-31',
+        ]);
+
+        BoqItem::create([
+            'project_id' => $project->id,
+            'item_code' => 'B-01',
+            'description' => 'بند',
+            'unit' => 'م2',
+            'total_quantity' => 10,
+            'unit_price' => 100,
+            'total_price' => 1000,
+            'weight_percentage' => 100,
+            'current_progress_percentage' => 75,
+        ]);
+
+        DailyReport::create([
+            'project_id' => $project->id,
+            'user_id' => $this->userA->id,
+            'report_date' => '2026-09-18',
+            'manpower_count' => 45,
+            'work_summary' => 'أعمال يومية مكثفة',
+            'status' => 'submitted',
+        ]);
+
+        PaymentClaim::create([
+            'tenant_id' => $this->tenantA->id,
+            'project_id' => $project->id,
+            'claim_number' => 'CLM-EX-1',
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-03-31',
+            'claimed_amount' => 250000,
+            'approved_amount' => 240000,
+            'vat_amount' => 37500,
+            'status' => 'certified',
+        ]);
+
+        $response = $this->actingAs($this->userA)->getJson("/api/v1/projects/{$project->id}/executive-summary");
+        $response->assertStatus(200)
+            ->assertJsonPath('data.weighted_progress', 75)
+            ->assertJsonPath('data.today_or_latest_manpower', 45)
+            ->assertJsonPath('data.total_claimed', 250000)
+            ->assertJsonPath('data.total_approved_claims', 240000);
+    }
 }

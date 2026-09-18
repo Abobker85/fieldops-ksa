@@ -29,6 +29,11 @@ class DailyReport extends Model
         'manpower_count' => 'integer',
     ];
 
+    protected $appends = [
+        'share_token',
+        'export_url',
+    ];
+
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
@@ -42,5 +47,15 @@ class DailyReport extends Model
     public function media(): HasMany
     {
         return $this->hasMany(DailyReportMedia::class);
+    }
+
+    public function getShareTokenAttribute(): string
+    {
+        return hash_hmac('sha256', "report-{$this->id}-{$this->project_id}", config('app.key') ?: 'fieldops-secret-key');
+    }
+
+    public function getExportUrlAttribute(): string
+    {
+        return url("/api/v1/daily-reports/{$this->id}/export-pdf?share_token={$this->share_token}");
     }
 }

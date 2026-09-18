@@ -9,8 +9,9 @@ use App\Http\Controllers\Api\SiteRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
-    // Public routes
+    // Public / Hybrid routes (WhatsApp share token or Sanctum auth)
     Route::post('/login', [AuthController::class, 'login']);
+    Route::get('/daily-reports/{id}/export-pdf', [DailyReportController::class, 'exportPdf']);
 
     // Protected routes
     Route::middleware('auth:sanctum')->group(function () {
@@ -30,7 +31,6 @@ Route::prefix('v1')->group(function () {
         Route::get('/daily-reports/{id}', [DailyReportController::class, 'show']);
         Route::patch('/daily-reports/{id}/status', [DailyReportController::class, 'updateStatus']);
         Route::post('/daily-reports/{id}/media', [DailyReportController::class, 'uploadMedia']);
-        Route::get('/daily-reports/{id}/export-pdf', [DailyReportController::class, 'exportPdf']);
 
         // Documents & Drawings Vault
         Route::get('/projects/{projectId}/documents', [DocumentController::class, 'index']);

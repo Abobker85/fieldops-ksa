@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0284c7">
     <meta name="description" content="FieldOps KSA - منصة إدارة العمليات الميدانية للمقاولات">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FieldOps KSA">
+    <link rel="manifest" href="/manifest.json">
     <title>FieldOps KSA | إدارة العمليات الميدانية للمقاولات</title>
 
     <!-- Google Font: Tajawal -->

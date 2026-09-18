@@ -32,6 +32,11 @@ class SiteRequestController extends Controller
 
     public function store(Request $request, int $projectId): JsonResponse
     {
+        $user = $request->user();
+        if ($user && $user->roles()->exists() && !$user->hasAnyRole(['owner', 'pm', 'site_engineer'])) {
+            return ApiResponse::error('غير مصرح لك بتقديم طلبات الموقع', 403);
+        }
+
         $project = Project::findOrFail($projectId);
 
         $validated = $request->validate([
@@ -59,8 +64,9 @@ class SiteRequestController extends Controller
         }
 
         $siteRequest = SiteRequest::create([
+            'tenant_id' => $project->tenant_id,
             'project_id' => $project->id,
-            'requested_by' => $request->user()->id,
+            'requested_by' => $user->id,
             'type' => $validated['type'],
             'request_number' => $requestNumber,
             'title' => $validated['title'],
