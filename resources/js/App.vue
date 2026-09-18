@@ -1,11 +1,12 @@
 <template>
   <div
-    class="min-h-screen min-h-[100dvh] w-full bg-slate-50 text-slate-800 flex flex-col antialiased transition-colors duration-200"
+    class="min-h-screen min-h-[100dvh] w-full flex flex-col antialiased transition-colors duration-200"
+    :class="isAuthPage ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'"
     :dir="localeStore.isRtl ? 'rtl' : 'ltr'"
   >
     <!-- Top Navigation Bar (Only for Authenticated Users) -->
-    <header v-if="authStore.isAuthenticated" class="bg-slate-900 text-white sticky top-0 z-40 shadow-sm border-b border-slate-800 w-full">
-      <div class="w-full max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header v-if="authStore.isAuthenticated && !isAuthPage" class="bg-slate-900 text-white sticky top-0 z-40 shadow-sm border-b border-slate-800 w-full">
+      <div class="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <!-- Brand & Tenant Name -->
         <div class="flex items-center gap-3">
           <router-link to="/" class="flex items-center gap-3 group">
@@ -71,14 +72,17 @@
       </div>
     </header>
 
-    <!-- Main View Container -->
-    <main class="flex-1 w-full max-w-[1920px] mx-auto p-4 sm:p-6 lg:p-8">
+    <!-- Main View Container: Full Bleed for Login / Auth, Fluid Spacing for Dashboard -->
+    <main
+      class="flex-1 w-full"
+      :class="isAuthPage ? 'p-0 m-0 max-w-none' : 'w-full px-4 sm:px-6 lg:px-8 py-6'"
+    >
       <router-view />
     </main>
 
     <!-- Clean Minimalist Footer -->
-    <footer v-if="authStore.isAuthenticated" class="bg-white border-t border-slate-200/80 py-3.5 text-center text-xs text-slate-500 w-full">
-      <div class="w-full max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+    <footer v-if="authStore.isAuthenticated && !isAuthPage" class="bg-white border-t border-slate-200/80 py-3.5 text-center text-xs text-slate-500 w-full">
+      <div class="w-full px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
         <p class="text-slate-500">{{ localeStore.t('common.footer') }}</p>
         <span class="text-[11px] font-mono text-slate-400">v1.2.0 • FieldOps KSA</span>
       </div>
@@ -87,15 +91,36 @@
 </template>
 
 <script setup>
-import { onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { LogOut } from 'lucide-vue-next';
 import { useAuthStore } from './stores/auth';
 import { useLocaleStore } from './stores/locale';
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const localeStore = useLocaleStore();
+
+const isAuthPage = computed(() => route.name === 'Login' || !authStore.isAuthenticated);
+
+watch(isAuthPage, (val) => {
+  if (typeof document !== 'undefined') {
+    if (val) {
+      if (document.body) {
+        document.body.classList.remove('bg-slate-50', 'text-slate-800');
+        document.body.classList.add('bg-slate-950', 'text-slate-100');
+      }
+      document.documentElement.classList.add('bg-slate-950');
+    } else {
+      if (document.body) {
+        document.body.classList.remove('bg-slate-950', 'text-slate-100');
+        document.body.classList.add('bg-slate-50', 'text-slate-800');
+      }
+      document.documentElement.classList.remove('bg-slate-950');
+    }
+  }
+}, { immediate: true });
 
 const handleLogout = async () => {
   await authStore.logout();

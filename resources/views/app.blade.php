@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" class="w-full min-h-screen min-h-[100dvh]">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -17,13 +17,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
 
-    <!-- Inline anti-FOUC script for locale and direction -->
+    <!-- Inline anti-FOUC script for locale, direction, and route theme -->
     <script>
         (function() {
             var saved = localStorage.getItem('fieldops_locale');
             if (saved === 'en') {
                 document.documentElement.setAttribute('lang', 'en');
                 document.documentElement.setAttribute('dir', 'ltr');
+            }
+            var token = localStorage.getItem('fieldops_token');
+            if (!token || window.location.pathname.indexOf('/login') !== -1) {
+                document.documentElement.classList.add('bg-slate-950');
             }
         })();
     </script>

@@ -1,6 +1,6 @@
 <template>
   <div
-    class="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 px-4 relative overflow-hidden transition-colors duration-200"
+    class="min-h-screen min-h-[100dvh] w-full bg-slate-950 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 relative overflow-hidden transition-colors duration-200"
     :dir="localeStore.isRtl ? 'rtl' : 'ltr'"
   >
     <!-- Background subtle gradient glow -->
