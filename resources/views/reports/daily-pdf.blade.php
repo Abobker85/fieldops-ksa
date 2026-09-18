@@ -125,24 +125,25 @@
     <div class="header">
         <table class="header-table">
             <tr>
-                <td style="width: 50%;">
-                    <div class="company-name">{{ $tenant->name ?? 'شركة المقاولات' }}</div>
-                    <div style="font-size: 10px; color: #64748b;">سجل تجاري: {{ $tenant->cr_number ?? '-' }} | الرقم الضريبي: {{ $tenant->vat_number ?? '-' }}</div>
+                <td style="width: 60%; vertical-align: top;">
+                    <div class="company-name" style="font-size: 16px; font-weight: bold; color: #0369a1;">{{ $tenant->name ?? 'شركة المقاولات' }}</div>
+                    <div style="font-size: 10px; color: #64748b; margin-top: 3px;">سجل تجاري: {{ $tenant->cr_number ?? '-' }} | الرقم الضريبي: {{ $tenant->vat_number ?? '-' }}</div>
                 </td>
-                <td style="width: 50%; text-align: left;">
-                    <div style="font-size: 14px; font-weight: bold; color: #0284c7;">FieldOps KSA</div>
-                    <div style="font-size: 10px; color: #64748b;">تاريخ التقرير: {{ $report->report_date->format('Y-m-d') }}</div>
+                <td style="width: 40%; text-align: left; vertical-align: top;">
+                    <div style="font-size: 15px; font-weight: bold; color: #0284c7;" dir="ltr">FieldOps KSA</div>
+                    <div style="font-size: 10px; color: #64748b; margin-top: 3px;"><span dir="ltr">{{ $report->report_date->format('Y-m-d') }}</span> :تاريخ التقرير</div>
                 </td>
             </tr>
         </table>
-        <div class="report-title">تقرير الموقع الميداني اليومي (Daily Site Report)</div>
+        <div class="report-title">تقرير الموقع الميداني اليومي</div>
+        <div style="font-size: 11px; text-align: center; color: #64748b; margin-top: 2px;" dir="ltr">Daily Site Report</div>
     </div>
 
     <div class="meta-box">
         <table class="meta-table">
             <tr>
                 <td class="meta-label">المشروع:</td>
-                <td class="meta-val">{{ $project->name }} ({{ $project->code }})</td>
+                <td class="meta-val">{{ $project->name }} <span dir="ltr" style="color: #64748b;">({{ $project->code }})</span></td>
                 <td class="meta-label">المدينة:</td>
                 <td class="meta-val">{{ $project->location_city }}</td>
             </tr>
@@ -169,13 +170,13 @@
 
     <div class="section-title">ملخص الأعمال المنفذة اليوم</div>
     <div class="content-box">
-        {{ $report->work_summary }}
+        {!! nl2br(e($report->work_summary)) !!}
     </div>
 
     @if($report->blockers_notes)
     <div class="section-title" style="color: #be123c; border-color: #f43f5e;">المعوقات والملاحظات الحرجة</div>
     <div class="blockers-box">
-        {{ $report->blockers_notes }}
+        {!! nl2br(e($report->blockers_notes)) !!}
     </div>
     @endif
 
@@ -222,7 +223,7 @@
     @endif
 
     <div class="footer">
-        تم استخراج هذا التقرير آلياً عبر منصة FieldOps KSA لإدارة العمليات الميدانية للمقاولات | {{ date('Y-m-d H:i') }}
+        تم استخراج هذا التقرير آلياً عبر منصة FieldOps KSA لإدارة العمليات الميدانية للمقاولات | <span dir="ltr">{{ date('Y-m-d H:i') }}</span>
     </div>
 </body>
 </html>

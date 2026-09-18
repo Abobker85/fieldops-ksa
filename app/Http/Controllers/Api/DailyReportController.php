@@ -8,6 +8,7 @@ use App\Jobs\ProcessDailyReportMediaThumbnail;
 use App\Models\DailyReport;
 use App\Models\DailyReportMedia;
 use App\Models\Project;
+use App\Services\ArabicPdfService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -189,7 +190,7 @@ class DailyReportController extends Controller
                 ->findOrFail($id);
         }
 
-        $pdf = Pdf::loadView('reports.daily-pdf', [
+        $pdf = ArabicPdfService::loadView('reports.daily-pdf', [
             'report' => $report,
             'project' => $report->project,
             'tenant' => $report->project->tenant,
