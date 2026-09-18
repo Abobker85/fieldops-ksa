@@ -24,6 +24,11 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
+            'tenant_id' => \App\Models\Tenant::first()?->id ?? \App\Models\Tenant::create([
+                'name' => 'شركة تجريبية',
+                'cr_number' => '1010999999',
+                'vat_number' => '300099999900003',
+            ])->id,
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),

@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::create('daily_reports', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete();
             $table->foreignId('project_id')->constrained('projects')->cascadeOnDelete();
             $table->foreignId('user_id')->constrained('users')->restrictOnDelete();
             $table->date('report_date');
@@ -28,6 +29,7 @@ return new class extends Migration
 
         Schema::create('daily_report_media', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete();
             $table->foreignId('daily_report_id')->constrained('daily_reports')->cascadeOnDelete();
             $table->string('file_path', 255);
             $table->string('thumbnail_path', 255)->nullable();

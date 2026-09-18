@@ -24,6 +24,11 @@ class BoqAndClaimController extends Controller
 
     public function storeBoqItem(Request $request, int $projectId): JsonResponse
     {
+        $user = $request->user();
+        if ($user->roles()->exists() && !$user->hasAnyRole(['owner', 'pm'])) {
+            return ApiResponse::error('غير مصرح لك بإضافة بنود المقايسة', 403);
+        }
+
         $project = Project::findOrFail($projectId);
 
         $validated = $request->validate([
@@ -36,9 +41,15 @@ class BoqAndClaimController extends Controller
             'current_progress_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
+        $currentTotalWeight = (float) $project->boqItems()->sum('weight_percentage');
+        if ($currentTotalWeight + (float) $validated['weight_percentage'] > 100.01) {
+            return ApiResponse::error('إجمالي الوزن النسبي لبنود المقايسة لا يمكن أن يتجاوز 100%', 422);
+        }
+
         $totalPrice = round($validated['total_quantity'] * $validated['unit_price'], 2);
 
         $item = BoqItem::create([
+            'tenant_id' => $project->tenant_id,
             'project_id' => $project->id,
             'item_code' => $validated['item_code'],
             'description' => $validated['description'],
@@ -60,6 +71,11 @@ class BoqAndClaimController extends Controller
 
     public function updateBoqProgress(Request $request, int $id): JsonResponse
     {
+        $user = $request->user();
+        if ($user->roles()->exists() && !$user->hasAnyRole(['owner', 'pm', 'site_engineer'])) {
+            return ApiResponse::error('غير مصرح لك بتحديث نسبة إنجاز البند', 403);
+        }
+
         $item = BoqItem::with('project')->findOrFail($id);
 
         $validated = $request->validate([
@@ -87,6 +103,11 @@ class BoqAndClaimController extends Controller
 
     public function storeClaim(Request $request, int $projectId): JsonResponse
     {
+        $user = $request->user();
+        if ($user->roles()->exists() && !$user->hasAnyRole(['owner', 'pm'])) {
+            return ApiResponse::error('غير مصرح لك بتسجيل المستخلصات', 403);
+        }
+
         $project = Project::findOrFail($projectId);
 
         $validated = $request->validate([
@@ -102,6 +123,7 @@ class BoqAndClaimController extends Controller
         $vatAmount = $validated['vat_amount'] ?? round($validated['claimed_amount'] * 0.15, 2);
 
         $claim = PaymentClaim::create([
+            'tenant_id' => $project->tenant_id,
             'project_id' => $project->id,
             'claim_number' => $validated['claim_number'],
             'period_start' => $validated['period_start'],
@@ -113,5 +135,27 @@ class BoqAndClaimController extends Controller
         ]);
 
         return ApiResponse::success($claim, 'تم تسجيل المستخلص بنجاح', 201);
+    }
+
+    public function updateClaimStatus(Request $request, int $id): JsonResponse
+    {
+        $claim = PaymentClaim::findOrFail($id);
+
+        $user = $request->user();
+        if ($user->roles()->exists() && !$user->hasAnyRole(['owner', 'pm'])) {
+            return ApiResponse::error('غير مصرح لك بتحديث حالة المستخلص', 403);
+        }
+
+        $validated = $request->validate([
+            'status' => ['required', 'in:submitted,certified,paid_partially,paid'],
+            'approved_amount' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $claim->update([
+            'status' => $validated['status'],
+            'approved_amount' => $validated['approved_amount'] ?? $claim->approved_amount,
+        ]);
+
+        return ApiResponse::success($claim, 'تم تحديث حالة المستخلص بنجاح');
     }
 }

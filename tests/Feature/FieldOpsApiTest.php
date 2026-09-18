@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\BoqItem;
 use App\Models\DailyReport;
+use App\Models\PaymentClaim;
 use App\Models\Project;
+use App\Models\SiteRequest;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -281,5 +283,309 @@ class FieldOpsApiTest extends TestCase
         $listResponse = $this->actingAs($this->userA)->getJson("/api/v1/projects/{$project->id}/documents?ifc_only=1");
         $listResponse->assertStatus(200);
         $this->assertCount(1, $listResponse->json('data'));
+    }
+
+    public function test_cross_tenant_isolation_on_child_resources(): void
+    {
+        Storage::fake('public');
+
+        $projectA = Project::create([
+            'tenant_id' => $this->tenantA->id,
+            'code' => 'PRJ-A-SEC',
+            'name' => 'مشروع أ الأمني',
+            'client_name' => 'العميل أ',
+            'location_city' => 'الرياض',
+            'contract_value' => 500000,
+            'start_date' => '2026-01-01',
+            'expected_end_date' => '2026-12-31',
+        ]);
+
+        $reportA = DailyReport::create([
+            'project_id' => $projectA->id,
+            'user_id' => $this->userA->id,
+            'report_date' => '2026-09-18',
+            'weather_condition' => 'معتدل',
+            'manpower_count' => 10,
+            'work_summary' => 'أعمال خاصة بالشركة أ',
+            'status' => 'submitted',
+        ]);
+
+        $itemA = BoqItem::create([
+            'project_id' => $projectA->id,
+            'item_code' => 'BOQ-SEC',
+            'description' => 'بند سري',
+            'unit' => 'م2',
+            'total_quantity' => 100,
+            'unit_price' => 500,
+            'total_price' => 50000,
+            'weight_percentage' => 50,
+            'current_progress_percentage' => 10,
+        ]);
+
+        $reqA = SiteRequest::create([
+            'project_id' => $projectA->id,
+            'requested_by' => $this->userA->id,
+            'type' => 'WIR',
+            'request_number' => 'WIR-SEC-01',
+            'title' => 'طلب خاص بشركة أ',
+            'description' => 'تفاصيل خاصة',
+            'status' => 'pending',
+        ]);
+
+        // 1. User B must NOT be able to view Report A
+        $response = $this->actingAs($this->userB)->getJson("/api/v1/daily-reports/{$reportA->id}");
+        $this->assertContains($response->status(), [403, 404]);
+
+        // 2. User B must NOT be able to export PDF of Report A
+        $pdfResponse = $this->actingAs($this->userB)->get("/api/v1/daily-reports/{$reportA->id}/export-pdf");
+        $this->assertContains($pdfResponse->status(), [403, 404]);
+
+        // 3. User B must NOT be able to upload media to Report A
+        $fakeImg = UploadedFile::fake()->image('hack.jpg');
+        $uploadResp = $this->actingAs($this->userB)->postJson("/api/v1/daily-reports/{$reportA->id}/media", [
+            'file' => $fakeImg,
+        ]);
+        $this->assertContains($uploadResp->status(), [403, 404]);
+
+        // 4. User B must NOT be able to update BOQ progress of Item A
+        $patchBoqResp = $this->actingAs($this->userB)->patchJson("/api/v1/boq/{$itemA->id}/progress", [
+            'current_progress_percentage' => 90,
+        ]);
+        $this->assertContains($patchBoqResp->status(), [403, 404]);
+        $this->assertEquals(10.0, (float) $itemA->fresh()->current_progress_percentage);
+
+        // 5. User B must NOT be able to approve Site Request A
+        $patchReqResp = $this->actingAs($this->userB)->patchJson("/api/v1/requests/{$reqA->id}/status", [
+            'status' => 'approved',
+        ]);
+        $this->assertContains($patchReqResp->status(), [403, 404]);
+        $this->assertEquals('pending', $reqA->fresh()->status);
+    }
+
+    public function test_role_authorization_on_sensitive_actions(): void
+    {
+        Role::firstOrCreate(['name' => 'pm', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'viewer', 'guard_name' => 'web']);
+
+        $engineer = User::create([
+            'tenant_id' => $this->tenantA->id,
+            'name' => 'مهندس ميداني',
+            'email' => 'eng_role@test.com',
+            'password' => bcrypt('secret123'),
+            'status' => 'active',
+        ]);
+        $engineer->assignRole('site_engineer');
+
+        $pm = User::create([
+            'tenant_id' => $this->tenantA->id,
+            'name' => 'مدير مشاريع',
+            'email' => 'pm_role@test.com',
+            'password' => bcrypt('secret123'),
+            'status' => 'active',
+        ]);
+        $pm->assignRole('pm');
+
+        $project = Project::create([
+            'tenant_id' => $this->tenantA->id,
+            'code' => 'PRJ-ROLE',
+            'name' => 'مشروع اختبار الصلاحيات',
+            'client_name' => 'عميل الصلاحيات',
+            'location_city' => 'الرياض',
+            'contract_value' => 800000,
+            'start_date' => '2026-01-01',
+            'expected_end_date' => '2026-12-31',
+        ]);
+
+        $request = SiteRequest::create([
+            'tenant_id' => $this->tenantA->id,
+            'project_id' => $project->id,
+            'requested_by' => $engineer->id,
+            'type' => 'WIR',
+            'request_number' => 'WIR-ROLE-01',
+            'title' => 'طلب بحاجة لاعتماد',
+            'description' => 'وصف الطلب',
+            'status' => 'pending',
+        ]);
+
+        // 1. Site Engineer must NOT be allowed to approve requests (403)
+        $respEng = $this->actingAs($engineer)->patchJson("/api/v1/requests/{$request->id}/status", [
+            'status' => 'approved',
+        ]);
+        $respEng->assertStatus(403);
+        $this->assertEquals('pending', $request->fresh()->status);
+
+        // 2. PM CAN approve requests (200)
+        $respPm = $this->actingAs($pm)->patchJson("/api/v1/requests/{$request->id}/status", [
+            'status' => 'approved',
+            'response_notes' => 'معتمد من مدير المشروع',
+        ]);
+        $respPm->assertStatus(200);
+        $this->assertEquals('approved', $request->fresh()->status);
+
+        // 3. Site Engineer must NOT create new projects (403)
+        $createProjResp = $this->actingAs($engineer)->postJson('/api/v1/projects', [
+            'code' => 'PRJ-UNAUTH',
+            'name' => 'مشروع غير مصرح',
+            'client_name' => 'عميل',
+            'location_city' => 'الرياض',
+            'contract_value' => 100000,
+            'start_date' => '2026-01-01',
+            'expected_end_date' => '2026-12-31',
+        ]);
+        $createProjResp->assertStatus(403);
+
+        // 4. Site Engineer must NOT create payment claims (403)
+        $claimResp = $this->actingAs($engineer)->postJson("/api/v1/projects/{$project->id}/claims", [
+            'claim_number' => 'CLM-UNAUTH',
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-01-31',
+            'claimed_amount' => 50000,
+        ]);
+        $claimResp->assertStatus(403);
+
+        // 5. PM CAN create payment claims (201)
+        $pmClaimResp = $this->actingAs($pm)->postJson("/api/v1/projects/{$project->id}/claims", [
+            'claim_number' => 'CLM-AUTH',
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-01-31',
+            'claimed_amount' => 50000,
+        ]);
+        $pmClaimResp->assertStatus(201);
+    }
+
+    public function test_daily_report_concurrency_and_status_update(): void
+    {
+        Role::firstOrCreate(['name' => 'pm', 'guard_name' => 'web']);
+
+        $pm = User::create([
+            'tenant_id' => $this->tenantA->id,
+            'name' => 'مدير معتمد',
+            'email' => 'pm_rep@test.com',
+            'password' => bcrypt('secret123'),
+            'status' => 'active',
+        ]);
+        $pm->assignRole('pm');
+
+        $project = Project::create([
+            'tenant_id' => $this->tenantA->id,
+            'code' => 'PRJ-CONC',
+            'name' => 'مشروع التزامن',
+            'client_name' => 'عميل التزامن',
+            'location_city' => 'الرياض',
+            'contract_value' => 600000,
+            'start_date' => '2026-01-01',
+            'expected_end_date' => '2026-12-31',
+        ]);
+
+        // Submission 1
+        $resp1 = $this->actingAs($this->userA)->postJson("/api/v1/projects/{$project->id}/daily-reports", [
+            'report_date' => '2026-09-18',
+            'manpower_count' => 15,
+            'work_summary' => 'التقرير الأول في الصباح',
+            'status' => 'submitted',
+        ]);
+        $resp1->assertStatus(201);
+        $reportId = $resp1->json('data.id');
+
+        // Submission 2 on the SAME date (should update gracefully without 500 duplicate key error)
+        $resp2 = $this->actingAs($this->userA)->postJson("/api/v1/projects/{$project->id}/daily-reports", [
+            'report_date' => '2026-09-18',
+            'manpower_count' => 22,
+            'work_summary' => 'تحديث مسائي للأعمال',
+            'status' => 'submitted',
+        ]);
+        $resp2->assertStatus(200);
+        $this->assertEquals(22, $resp2->json('data.manpower_count'));
+        $this->assertEquals($reportId, $resp2->json('data.id'));
+
+        // PM approves the report
+        $patchStatus = $this->actingAs($pm)->patchJson("/api/v1/daily-reports/{$reportId}/status", [
+            'status' => 'approved',
+        ]);
+        $patchStatus->assertStatus(200)
+            ->assertJsonPath('data.status', 'approved');
+    }
+
+    public function test_boq_weight_percentage_validation(): void
+    {
+        Role::firstOrCreate(['name' => 'owner', 'guard_name' => 'web']);
+        $this->userA->assignRole('owner');
+
+        $project = Project::create([
+            'tenant_id' => $this->tenantA->id,
+            'code' => 'PRJ-WEIGHT',
+            'name' => 'مشروع فحص الأوزان',
+            'client_name' => 'عميل',
+            'location_city' => 'الرياض',
+            'contract_value' => 500000,
+            'start_date' => '2026-01-01',
+            'expected_end_date' => '2026-12-31',
+        ]);
+
+        // Item 1: 70%
+        $this->actingAs($this->userA)->postJson("/api/v1/projects/{$project->id}/boq", [
+            'item_code' => 'BOQ-W1',
+            'description' => 'بند 1',
+            'unit' => 'م2',
+            'total_quantity' => 10,
+            'unit_price' => 100,
+            'weight_percentage' => 70,
+        ])->assertStatus(201);
+
+        // Item 2: 40% (70 + 40 = 110 > 100, must be rejected with 422)
+        $respOver = $this->actingAs($this->userA)->postJson("/api/v1/projects/{$project->id}/boq", [
+            'item_code' => 'BOQ-W2',
+            'description' => 'بند 2',
+            'unit' => 'م2',
+            'total_quantity' => 10,
+            'unit_price' => 100,
+            'weight_percentage' => 40,
+        ]);
+        $respOver->assertStatus(422)
+            ->assertJsonPath('success', false);
+    }
+
+    public function test_payment_claim_status_lifecycle(): void
+    {
+        Role::firstOrCreate(['name' => 'owner', 'guard_name' => 'web']);
+        $this->userA->assignRole('owner');
+
+        $project = Project::create([
+            'tenant_id' => $this->tenantA->id,
+            'code' => 'PRJ-CLM',
+            'name' => 'مشروع المستخلصات',
+            'client_name' => 'عميل المستخلص',
+            'location_city' => 'الرياض',
+            'contract_value' => 1000000,
+            'start_date' => '2026-01-01',
+            'expected_end_date' => '2026-12-31',
+        ]);
+
+        $claim = PaymentClaim::create([
+            'tenant_id' => $this->tenantA->id,
+            'project_id' => $project->id,
+            'claim_number' => 'CLM-TEST-01',
+            'period_start' => '2026-01-01',
+            'period_end' => '2026-03-31',
+            'claimed_amount' => 200000,
+            'vat_amount' => 30000,
+            'status' => 'submitted',
+        ]);
+
+        // Certify claim
+        $certResp = $this->actingAs($this->userA)->patchJson("/api/v1/claims/{$claim->id}/status", [
+            'status' => 'certified',
+            'approved_amount' => 190000,
+        ]);
+        $certResp->assertStatus(200)
+            ->assertJsonPath('data.status', 'certified')
+            ->assertJsonPath('data.approved_amount', '190000.00');
+
+        // Mark paid
+        $payResp = $this->actingAs($this->userA)->patchJson("/api/v1/claims/{$claim->id}/status", [
+            'status' => 'paid',
+        ]);
+        $payResp->assertStatus(200)
+            ->assertJsonPath('data.status', 'paid');
     }
 }

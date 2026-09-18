@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::create('site_requests', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete();
             $table->foreignId('project_id')->constrained('projects')->cascadeOnDelete();
             $table->foreignId('requested_by')->constrained('users')->restrictOnDelete();
             $table->enum('type', ['RFI', 'WIR', 'VARIATION_ORDER']);

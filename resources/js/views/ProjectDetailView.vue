@@ -228,6 +228,15 @@
             </div>
 
             <div class="flex items-center gap-2">
+              <button
+                v-if="canManageBoq && report.status !== 'approved'"
+                @click="approveDailyReport(report.id)"
+                class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-sm"
+              >
+                <span>✓</span>
+                <span>اعتماد التقرير</span>
+              </button>
+
               <a
                 :href="`/api/v1/daily-reports/${report.id}/export-pdf`"
                 target="_blank"
@@ -422,13 +431,13 @@
           <!-- Status Action for PM/Consultant/Owner -->
           <div v-if="canApproveRequests && req.status === 'pending'" class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
             <button
-              @click="updateRequestStatus(req.id, 'approved')"
+              @click="openReviewModal(req, 'approved')"
               class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition"
             >
               ✓ اعتماد الطلب
             </button>
             <button
-              @click="updateRequestStatus(req.id, 'rejected')"
+              @click="openReviewModal(req, 'rejected')"
               class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition"
             >
               ✕ رفض
@@ -446,6 +455,7 @@
           <p class="text-xs text-slate-500">تتبع المستخلصات الدورية وضريبة القيمة المضافة 15%</p>
         </div>
         <button
+          v-if="canManageBoq"
           @click="showCreateClaimModal = true"
           class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition"
         >
@@ -465,6 +475,7 @@
                 <th class="p-3.5">الإجمالي شاملاً الضريبة</th>
                 <th class="p-3.5">المبلغ المعتمد</th>
                 <th class="p-3.5">الحالة</th>
+                <th class="p-3.5 text-center">الإجراء</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -481,6 +492,26 @@
                   <span class="px-2.5 py-0.5 rounded-full font-bold text-[11px]" :class="getClaimStatusBadge(claim.status)">
                     {{ translateClaimStatus(claim.status) }}
                   </span>
+                </td>
+                <td class="p-3.5 text-center">
+                  <div v-if="canManageBoq" class="flex items-center justify-center gap-1">
+                    <button
+                      v-if="claim.status === 'submitted'"
+                      @click="updateClaimStatusAction(claim.id, 'certified')"
+                      class="px-2.5 py-1 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-lg font-bold text-[11px] transition"
+                    >
+                      اعتماد للصرف
+                    </button>
+                    <button
+                      v-else-if="claim.status === 'certified'"
+                      @click="updateClaimStatusAction(claim.id, 'paid')"
+                      class="px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg font-bold text-[11px] transition"
+                    >
+                      تسجيل الصرف
+                    </button>
+                    <span v-else class="text-slate-400 text-[11px]">-</span>
+                  </div>
+                  <span v-else class="text-slate-400 text-[11px]">-</span>
                 </td>
               </tr>
             </tbody>
@@ -620,6 +651,275 @@
         </div>
       </div>
     </div>
+
+    <!-- Add BOQ Item Modal -->
+    <div v-if="showAddBoqModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+      <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-200 overflow-y-auto max-h-[90vh]">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <h3 class="text-base font-bold text-slate-900">إضافة بند مقايسة جديد (BOQ Item)</h3>
+          <button @click="showAddBoqModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+
+        <form @submit.prevent="submitAddBoqItem" class="space-y-4 mt-4 text-sm">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">كود البند</label>
+              <input v-model="boqForm.item_code" required placeholder="BOQ-06" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">الوحدة</label>
+              <select v-model="boqForm.unit" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                <option value="م2">م2</option>
+                <option value="م3">م3</option>
+                <option value="متر طولي">متر طولي</option>
+                <option value="طن">طن</option>
+                <option value="عدد">عدد</option>
+                <option value="مقطوعية">مقطوعية</option>
+                <option value="ساعة">ساعة</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">بيان ووصف الأعمال</label>
+            <textarea v-model="boqForm.description" required rows="2" placeholder="وصف تفصيلي لبند المقايسة والمواصفات..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none"></textarea>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">إجمالي الكمية</label>
+              <input v-model.number="boqForm.total_quantity" type="number" step="0.01" min="0.01" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">سعر الوحدة (SAR)</label>
+              <input v-model.number="boqForm.unit_price" type="number" step="0.01" min="0" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">الوزن النسبي (%)</label>
+              <input v-model.number="boqForm.weight_percentage" type="number" step="0.01" min="0" max="100" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center text-xs">
+            <span class="text-slate-600">إجمالي قيمة البند التقديرية:</span>
+            <span class="font-black text-slate-900 text-sm">{{ formatCurrency((boqForm.total_quantity || 0) * (boqForm.unit_price || 0)) }} ر.س</span>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+            <button type="button" @click="showAddBoqModal = false" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium">إلغاء</button>
+            <button type="submit" :disabled="submittingBoq" class="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold transition disabled:opacity-50">
+              <span v-if="submittingBoq">جاري الإضافة...</span>
+              <span v-else>حفظ البند في المقايسة</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Upload Document Modal -->
+    <div v-if="showUploadDocModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+      <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-200 overflow-y-auto max-h-[90vh]">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <h3 class="text-base font-bold text-slate-900">رفع مخطط أو مستند هندسي جديد</h3>
+          <button @click="showUploadDocModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+
+        <form @submit.prevent="submitUploadDocument" class="space-y-4 mt-4 text-sm">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">عنوان المخطط / المستند</label>
+              <input v-model="docForm.title" required placeholder="مخطط تسليح الأعمدة" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">كود المخطط</label>
+              <input v-model="docForm.document_code" required placeholder="DWG-ST-202" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">التخصص</label>
+              <select v-model="docForm.discipline" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                <option value="architectural">معماري</option>
+                <option value="structural">إنشائي</option>
+                <option value="mechanical">ميكانيكا</option>
+                <option value="electrical">كهرباء</option>
+                <option value="contracts">عقود</option>
+                <option value="permits">تراخيص</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">رقم المراجعة (Revision)</label>
+              <input v-model="docForm.current_revision" placeholder="Rev 00" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
+            <input id="ifcCheck" v-model="docForm.is_approved_for_construction" type="checkbox" class="w-4 h-4 text-amber-500 rounded focus:ring-amber-500" />
+            <label for="ifcCheck" class="text-xs font-bold text-slate-800 cursor-pointer">
+              مخطط معتمد للتنفيذ والبناء (Issued For Construction - IFC)
+            </label>
+          </div>
+
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">ملف المخطط (PDF, DWG, DXF, إلخ)</label>
+            <input type="file" @change="onDocFileSelected" required class="w-full text-xs text-slate-500 file:mr-0 file:ml-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-800 hover:file:bg-amber-100" />
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+            <button type="button" @click="showUploadDocModal = false" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium">إلغاء</button>
+            <button type="submit" :disabled="uploadingDoc" class="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition disabled:opacity-50">
+              <span v-if="uploadingDoc">جاري الرفع...</span>
+              <span v-else>رفع وأرشفة المخطط</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Create Site Request Modal -->
+    <div v-if="showCreateRequestModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+      <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-200 overflow-y-auto max-h-[90vh]">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <h3 class="text-base font-bold text-slate-900">تقديم طلب موقع / اعتماد هندسي</h3>
+          <button @click="showCreateRequestModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+
+        <form @submit.prevent="submitCreateSiteRequest" class="space-y-4 mt-4 text-sm">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">نوع الطلب</label>
+              <select v-model="requestForm.type" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                <option value="WIR">طلب استلام أعمال (WIR)</option>
+                <option value="RFI">طلب استفسار فني (RFI)</option>
+                <option value="VARIATION_ORDER">أمر تغيير (Variation Order)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">رقم الطلب (اختياري)</label>
+              <input v-model="requestForm.request_number" placeholder="تلقائي: WIR-002" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">عنوان الطلب</label>
+            <input v-model="requestForm.title" required placeholder="مثال: طلب استلام حدادة أعمدة الدور الثاني" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">تفاصيل ومحتوى الطلب</label>
+            <textarea v-model="requestForm.description" required rows="3" placeholder="اشرح تفاصيل الاستلام أو الاستفسار الهندسي بالتفصيل..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none"></textarea>
+          </div>
+
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">موقع العمل في المشروع</label>
+            <input v-model="requestForm.location_details" placeholder="المحور B-4 إلى E-8، الطابق الأول" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+          </div>
+
+          <div v-if="requestForm.type === 'VARIATION_ORDER'">
+            <label class="block font-medium text-slate-700 mb-1">التكلفة المالية التقديرية (SAR)</label>
+            <input v-model.number="requestForm.estimated_cost_impact" type="number" step="0.01" min="0" placeholder="0.00" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+            <button type="button" @click="showCreateRequestModal = false" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium">إلغاء</button>
+            <button type="submit" :disabled="submittingRequest" class="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold transition disabled:opacity-50">
+              <span v-if="submittingRequest">جاري التقديم...</span>
+              <span v-else>إرسال الطلب للاعتماد</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Create Payment Claim Modal -->
+    <div v-if="showCreateClaimModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+      <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-200 overflow-y-auto max-h-[90vh]">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <h3 class="text-base font-bold text-slate-900">رفع مستخلص مالي جديد (Payment Claim)</h3>
+          <button @click="showCreateClaimModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+
+        <form @submit.prevent="submitCreateClaim" class="space-y-4 mt-4 text-sm">
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">رقم المستخلص</label>
+            <input v-model="claimForm.claim_number" required placeholder="CLM-04" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">بداية الفترة</label>
+              <input v-model="claimForm.period_start" type="date" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">نهاية الفترة</label>
+              <input v-model="claimForm.period_end" type="date" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">المبلغ المطلوب (بدون ضريبة)</label>
+              <input v-model.number="claimForm.claimed_amount" @input="claimForm.vat_amount = Math.round(claimForm.claimed_amount * 0.15)" type="number" step="0.01" min="0" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">ضريبة القيمة المضافة (15%)</label>
+              <input v-model.number="claimForm.vat_amount" type="number" step="0.01" min="0" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center text-xs">
+            <span class="text-slate-600">الإجمالي شاملاً الضريبة:</span>
+            <span class="font-black text-slate-900 text-sm">{{ formatCurrency((claimForm.claimed_amount || 0) + (claimForm.vat_amount || 0)) }} ر.س</span>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+            <button type="button" @click="showCreateClaimModal = false" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium">إلغاء</button>
+            <button type="submit" :disabled="submittingClaim" class="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold transition disabled:opacity-50">
+              <span v-if="submittingClaim">جاري التسجيل...</span>
+              <span v-else>حفظ المستخلص</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Review Request Modal -->
+    <div v-if="showReviewRequestModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+      <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <h3 class="text-base font-bold text-slate-900">
+            {{ reviewForm.status === 'approved' ? 'اعتماد الطلب الهندسي' : 'رفض الطلب الهندسي' }}
+          </h3>
+          <button @click="showReviewRequestModal = false" class="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+
+        <form @submit.prevent="submitRequestReview" class="space-y-4 mt-4 text-sm">
+          <div>
+            <span class="text-xs text-slate-500 block mb-1">الطلب:</span>
+            <div class="font-bold text-slate-800">{{ reviewForm.title }}</div>
+          </div>
+
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">ملاحظات وقرار الاستشاري / الإدارة</label>
+            <textarea v-model="reviewForm.response_notes" rows="3" placeholder="أدخل الملاحظات والتوجيهات الهندسية..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none"></textarea>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+            <button type="button" @click="showReviewRequestModal = false" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium">إلغاء</button>
+            <button
+              type="submit"
+              :disabled="submittingReview"
+              class="px-5 py-2 text-white rounded-xl font-bold transition disabled:opacity-50"
+              :class="reviewForm.status === 'approved' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'"
+            >
+              <span v-if="submittingReview">جاري المعالجة...</span>
+              <span v-else>{{ reviewForm.status === 'approved' ? 'تأكيد الاعتماد' : 'تأكيد الرفض' }}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -650,10 +950,17 @@ const showUploadDocModal = ref(false);
 const showCreateRequestModal = ref(false);
 const showCreateClaimModal = ref(false);
 const showPulseModal = ref(false);
+const showReviewRequestModal = ref(false);
 
 const pulseData = ref(null);
 const submittingReport = ref(false);
 const uploadingMedia = ref(false);
+const submittingBoq = ref(false);
+const uploadingDoc = ref(false);
+const submittingRequest = ref(false);
+const submittingClaim = ref(false);
+const submittingReview = ref(false);
+
 const selectedDiscipline = ref('all');
 const gpsCoords = ref({ lat: null, lng: null });
 
@@ -670,6 +977,50 @@ const mediaForm = ref({
   reportId: null,
   file: null,
   caption: '',
+});
+
+const boqForm = ref({
+  item_code: '',
+  description: '',
+  unit: 'م2',
+  total_quantity: 100,
+  unit_price: 150,
+  weight_percentage: 10,
+  current_progress_percentage: 0,
+});
+
+const docForm = ref({
+  title: '',
+  document_code: '',
+  discipline: 'structural',
+  current_revision: 'Rev 00',
+  is_approved_for_construction: false,
+  file: null,
+});
+
+const requestForm = ref({
+  type: 'WIR',
+  request_number: '',
+  title: '',
+  description: '',
+  location_details: '',
+  estimated_cost_impact: 0,
+});
+
+const claimForm = ref({
+  claim_number: '',
+  period_start: new Date().toISOString().split('T')[0],
+  period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  claimed_amount: 100000,
+  vat_amount: 15000,
+  status: 'submitted',
+});
+
+const reviewForm = ref({
+  id: null,
+  title: '',
+  status: 'approved',
+  response_notes: '',
 });
 
 const disciplines = [
@@ -836,13 +1187,161 @@ const loadExecutiveSummary = async () => {
   }
 };
 
-const updateRequestStatus = async (id, status) => {
-  const note = prompt('أدخل ملاحظات الاعتماد / الرفض إن وجدت:');
+const submitAddBoqItem = async () => {
+  submittingBoq.value = true;
   try {
-    await api.patch(`/requests/${id}/status`, { status, response_notes: note });
-    await fetchProjectDetails();
+    const res = await api.post(`/projects/${projectId}/boq`, boqForm.value);
+    boqItems.value.push(res.data.data.item);
+    project.value.weighted_progress = res.data.data.project_weighted_progress;
+    showAddBoqModal.value = false;
+    boqForm.value = {
+      item_code: '',
+      description: '',
+      unit: 'م2',
+      total_quantity: 100,
+      unit_price: 150,
+      weight_percentage: 10,
+      current_progress_percentage: 0,
+    };
   } catch (err) {
-    alert('فشل تحديث حالة الطلب');
+    alert(err.response?.data?.message || 'فشل إضافة بند المقايسة');
+  } finally {
+    submittingBoq.value = false;
+  }
+};
+
+const onDocFileSelected = (e) => {
+  docForm.value.file = e.target.files[0];
+};
+
+const submitUploadDocument = async () => {
+  if (!docForm.value.file) {
+    alert('يرجى اختيار ملف المخطط/المستند');
+    return;
+  }
+  uploadingDoc.value = true;
+  const fd = new FormData();
+  fd.append('title', docForm.value.title);
+  fd.append('document_code', docForm.value.document_code);
+  fd.append('discipline', docForm.value.discipline);
+  fd.append('current_revision', docForm.value.current_revision);
+  fd.append('is_approved_for_construction', docForm.value.is_approved_for_construction ? '1' : '0');
+  fd.append('file', docForm.value.file);
+
+  try {
+    const res = await api.post(`/projects/${projectId}/documents`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    projectDocuments.value.unshift(res.data.data);
+    showUploadDocModal.value = false;
+    docForm.value = {
+      title: '',
+      document_code: '',
+      discipline: 'structural',
+      current_revision: 'Rev 00',
+      is_approved_for_construction: false,
+      file: null,
+    };
+  } catch (err) {
+    alert(err.response?.data?.message || 'فشل رفع المخطط');
+  } finally {
+    uploadingDoc.value = false;
+  }
+};
+
+const submitCreateSiteRequest = async () => {
+  submittingRequest.value = true;
+  try {
+    const res = await api.post(`/projects/${projectId}/requests`, requestForm.value);
+    siteRequests.value.unshift(res.data.data);
+    showCreateRequestModal.value = false;
+    requestForm.value = {
+      type: 'WIR',
+      request_number: '',
+      title: '',
+      description: '',
+      location_details: '',
+      estimated_cost_impact: 0,
+    };
+  } catch (err) {
+    alert(err.response?.data?.message || 'فشل تقديم الطلب');
+  } finally {
+    submittingRequest.value = false;
+  }
+};
+
+const openReviewModal = (req, targetStatus) => {
+  reviewForm.value = {
+    id: req.id,
+    title: req.title,
+    status: targetStatus,
+    response_notes: '',
+  };
+  showReviewRequestModal.value = true;
+};
+
+const submitRequestReview = async () => {
+  submittingReview.value = true;
+  try {
+    const res = await api.patch(`/requests/${reviewForm.value.id}/status`, {
+      status: reviewForm.value.status,
+      response_notes: reviewForm.value.response_notes,
+    });
+    const idx = siteRequests.value.findIndex(r => r.id === reviewForm.value.id);
+    if (idx !== -1) {
+      siteRequests.value[idx] = res.data.data;
+    }
+    showReviewRequestModal.value = false;
+  } catch (err) {
+    alert(err.response?.data?.message || 'فشل تحديث حالة الطلب');
+  } finally {
+    submittingReview.value = false;
+  }
+};
+
+const submitCreateClaim = async () => {
+  submittingClaim.value = true;
+  try {
+    const res = await api.post(`/projects/${projectId}/claims`, claimForm.value);
+    paymentClaims.value.unshift(res.data.data);
+    showCreateClaimModal.value = false;
+    claimForm.value = {
+      claim_number: '',
+      period_start: new Date().toISOString().split('T')[0],
+      period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      claimed_amount: 100000,
+      vat_amount: 15000,
+      status: 'submitted',
+    };
+  } catch (err) {
+    alert(err.response?.data?.message || 'فشل تسجيل المستخلص');
+  } finally {
+    submittingClaim.value = false;
+  }
+};
+
+const approveDailyReport = async (reportId) => {
+  if (!confirm('هل أنت متأكد من اعتماد هذا التقرير اليومي رسمياً؟')) return;
+  try {
+    const res = await api.patch(`/daily-reports/${reportId}/status`, { status: 'approved' });
+    const idx = dailyReports.value.findIndex(r => r.id === reportId);
+    if (idx !== -1) {
+      dailyReports.value[idx].status = 'approved';
+    }
+  } catch (err) {
+    alert(err.response?.data?.message || 'فشل اعتماد التقرير');
+  }
+};
+
+const updateClaimStatusAction = async (claimId, newStatus) => {
+  try {
+    const res = await api.patch(`/claims/${claimId}/status`, { status: newStatus });
+    const idx = paymentClaims.value.findIndex(c => c.id === claimId);
+    if (idx !== -1) {
+      paymentClaims.value[idx].status = newStatus;
+    }
+  } catch (err) {
+    alert(err.response?.data?.message || 'فشل تحديث حالة المستخلص');
   }
 };
 

@@ -187,10 +187,19 @@
             @foreach($row as $item)
             <td class="photo-cell">
                 @php
-                    $fullPath = storage_path('app/public/' . ($item->thumbnail_path ?? $item->file_path));
+                    $imgSrc = null;
+                    $path = $item->thumbnail_path ?? $item->file_path;
+                    if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+                        $imgSrc = $path;
+                    } else {
+                        $fullPath = storage_path('app/public/' . $path);
+                        if (file_exists($fullPath)) {
+                            $imgSrc = $fullPath;
+                        }
+                    }
                 @endphp
-                @if(file_exists($fullPath))
-                    <img src="{{ $fullPath }}" class="photo-img" alt="Site Photo"/>
+                @if($imgSrc)
+                    <img src="{{ $imgSrc }}" class="photo-img" alt="Site Photo"/>
                 @else
                     <div style="padding: 20px; background: #f1f5f9; border: 1px dashed #cbd5e1; border-radius: 4px;">
                         صورة الموقع مأرشفة

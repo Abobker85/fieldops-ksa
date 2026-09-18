@@ -28,6 +28,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/projects/{projectId}/daily-reports', [DailyReportController::class, 'index']);
         Route::post('/projects/{projectId}/daily-reports', [DailyReportController::class, 'store']);
         Route::get('/daily-reports/{id}', [DailyReportController::class, 'show']);
+        Route::patch('/daily-reports/{id}/status', [DailyReportController::class, 'updateStatus']);
         Route::post('/daily-reports/{id}/media', [DailyReportController::class, 'uploadMedia']);
         Route::get('/daily-reports/{id}/export-pdf', [DailyReportController::class, 'exportPdf']);
 
@@ -46,5 +47,6 @@ Route::prefix('v1')->group(function () {
         Route::patch('/boq/{id}/progress', [BoqAndClaimController::class, 'updateBoqProgress']);
         Route::get('/projects/{projectId}/claims', [BoqAndClaimController::class, 'getClaims']);
         Route::post('/projects/{projectId}/claims', [BoqAndClaimController::class, 'storeClaim']);
+        Route::patch('/claims/{id}/status', [BoqAndClaimController::class, 'updateClaimStatus']);
     });
 });

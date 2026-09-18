@@ -47,36 +47,59 @@ class DailyReportController extends Controller
             'status' => ['nullable', 'in:draft,submitted,approved'],
         ]);
 
-        $existing = DailyReport::where('project_id', $project->id)
-            ->whereDate('report_date', $validated['report_date'])
-            ->first();
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $project, $validated) {
+            $existing = DailyReport::where('project_id', $project->id)
+                ->whereDate('report_date', $validated['report_date'])
+                ->lockForUpdate()
+                ->first();
 
-        if ($existing) {
-            $existing->update([
-                'weather_condition' => $validated['weather_condition'] ?? $existing->weather_condition,
+            if ($existing) {
+                $existing->update([
+                    'weather_condition' => $validated['weather_condition'] ?? $existing->weather_condition,
+                    'manpower_count' => $validated['manpower_count'],
+                    'work_summary' => $validated['work_summary'],
+                    'blockers_notes' => $validated['blockers_notes'] ?? null,
+                    'status' => $validated['status'] ?? 'submitted',
+                ]);
+                $report = $existing->load(['media', 'user']);
+                return ApiResponse::success($report, 'تم تحديث التقرير اليومي بنجاح');
+            }
+
+            $report = DailyReport::create([
+                'tenant_id' => $project->tenant_id,
+                'project_id' => $project->id,
+                'user_id' => $request->user()->id,
+                'report_date' => $validated['report_date'],
+                'weather_condition' => $validated['weather_condition'] ?? 'مشمس / معتدل',
                 'manpower_count' => $validated['manpower_count'],
                 'work_summary' => $validated['work_summary'],
                 'blockers_notes' => $validated['blockers_notes'] ?? null,
                 'status' => $validated['status'] ?? 'submitted',
             ]);
-            $report = $existing->load(['media', 'user']);
-            return ApiResponse::success($report, 'تم تحديث التقرير اليومي بنجاح');
+
+            $report->load(['media', 'user']);
+
+            return ApiResponse::success($report, 'تم حفظ التقرير اليومي بنجاح', 201);
+        });
+    }
+
+    public function updateStatus(Request $request, int $id): JsonResponse
+    {
+        $report = DailyReport::with(['project', 'user'])->findOrFail($id);
+
+        $user = $request->user();
+        if ($user->roles()->exists() && !$user->hasAnyRole(['owner', 'pm'])) {
+            return ApiResponse::error('غير مصرح لك باعتماد أو تعديل حالة التقرير اليومي', 403);
         }
 
-        $report = DailyReport::create([
-            'project_id' => $project->id,
-            'user_id' => $request->user()->id,
-            'report_date' => $validated['report_date'],
-            'weather_condition' => $validated['weather_condition'] ?? 'مشمس / معتدل',
-            'manpower_count' => $validated['manpower_count'],
-            'work_summary' => $validated['work_summary'],
-            'blockers_notes' => $validated['blockers_notes'] ?? null,
-            'status' => $validated['status'] ?? 'submitted',
+        $validated = $request->validate([
+            'status' => ['required', 'in:draft,submitted,approved'],
         ]);
 
+        $report->update(['status' => $validated['status']]);
         $report->load(['media', 'user']);
 
-        return ApiResponse::success($report, 'تم حفظ التقرير اليومي بنجاح', 201);
+        return ApiResponse::success($report, 'تم تحديث حالة التقرير اليومي بنجاح');
     }
 
     public function show(int $id): JsonResponse

@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::create('boq_items', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete();
             $table->foreignId('project_id')->constrained('projects')->cascadeOnDelete();
             $table->string('item_code', 50);
             $table->text('description');
@@ -27,6 +28,7 @@ return new class extends Migration
 
         Schema::create('payment_claims', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete();
             $table->foreignId('project_id')->constrained('projects')->cascadeOnDelete();
             $table->string('claim_number', 50);
             $table->date('period_start');

@@ -23,6 +23,11 @@ class ProjectController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if ($user->roles()->exists() && !$user->hasAnyRole(['owner', 'pm'])) {
+            return ApiResponse::error('غير مصرح لك بإنشاء مشاريع جديدة', 403);
+        }
+
         $validated = $request->validate([
             'code' => ['required', 'string', 'max:50'],
             'name' => ['required', 'string', 'max:191'],

@@ -79,6 +79,11 @@ class SiteRequestController extends Controller
     {
         $siteRequest = SiteRequest::with(['project', 'requester'])->findOrFail($id);
 
+        $user = $request->user();
+        if ($user->roles()->exists() && !$user->hasAnyRole(['owner', 'pm', 'viewer'])) {
+            return ApiResponse::error('غير مصرح لك باعتماد أو تعديل حالة الطلب الهندسي', 403);
+        }
+
         $validated = $request->validate([
             'status' => ['required', 'in:pending,approved,rejected,under_review'],
             'response_notes' => ['nullable', 'string'],

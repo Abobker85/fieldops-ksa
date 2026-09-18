@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::create('project_documents', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete();
             $table->foreignId('project_id')->constrained('projects')->cascadeOnDelete();
             $table->string('title', 191);
             $table->string('document_code', 100);
