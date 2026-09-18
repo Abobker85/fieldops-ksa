@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#0284c7">
     <meta name="description" content="FieldOps KSA - منصة إدارة العمليات الميدانية للمقاولات">
     <meta name="mobile-web-app-capable" content="yes">
@@ -30,7 +30,7 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="bg-slate-50 text-slate-800 antialiased min-h-screen selection:bg-amber-500 selection:text-white">
-    <div id="app"></div>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen min-h-[100dvh] w-full selection:bg-amber-500 selection:text-white">
+    <div id="app" class="w-full min-h-screen min-h-[100dvh] flex flex-col"></div>
 </body>
 </html>

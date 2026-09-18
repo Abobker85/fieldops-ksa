@@ -1,11 +1,11 @@
 <template>
   <div
-    class="min-h-screen bg-slate-50 text-slate-800 flex flex-col antialiased transition-colors duration-200"
+    class="min-h-screen min-h-[100dvh] w-full bg-slate-50 text-slate-800 flex flex-col antialiased transition-colors duration-200"
     :dir="localeStore.isRtl ? 'rtl' : 'ltr'"
   >
     <!-- Top Navigation Bar (Only for Authenticated Users) -->
-    <header v-if="authStore.isAuthenticated" class="bg-slate-900 text-white sticky top-0 z-40 shadow-sm border-b border-slate-800">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header v-if="authStore.isAuthenticated" class="bg-slate-900 text-white sticky top-0 z-40 shadow-sm border-b border-slate-800 w-full">
+      <div class="w-full max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <!-- Brand & Tenant Name -->
         <div class="flex items-center gap-3">
           <router-link to="/" class="flex items-center gap-3 group">
@@ -72,13 +72,13 @@
     </header>
 
     <!-- Main View Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+    <main class="flex-1 w-full max-w-[1920px] mx-auto p-4 sm:p-6 lg:p-8">
       <router-view />
     </main>
 
     <!-- Clean Minimalist Footer -->
-    <footer v-if="authStore.isAuthenticated" class="bg-white border-t border-slate-200/80 py-3.5 text-center text-xs text-slate-500">
-      <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+    <footer v-if="authStore.isAuthenticated" class="bg-white border-t border-slate-200/80 py-3.5 text-center text-xs text-slate-500 w-full">
+      <div class="w-full max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
         <p class="text-slate-500">{{ localeStore.t('common.footer') }}</p>
         <span class="text-[11px] font-mono text-slate-400">v1.2.0 • FieldOps KSA</span>
       </div>
